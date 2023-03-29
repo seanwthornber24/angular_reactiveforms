@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
-import { FormGroup, FormBuilder, Validators, AbstractControl, ValidatorFn } from '@angular/forms';
+import { FormGroup, FormBuilder, Validators, AbstractControl, ValidatorFn, FormArray } from '@angular/forms';
+import { debounceTime } from 'rxjs';
 
 import { Customer } from './customer';
 
@@ -34,7 +35,16 @@ function emailMatcher(c: AbstractControl): { [key: string]: boolean } | null {
 export class CustomerComponent implements OnInit {
   customerForm!: FormGroup;
   customer = new Customer();
-  emailMessage: string = "Lol";
+  emailMessage: string = "";
+
+  get addresses(): FormArray {
+    return <FormArray>this.customerForm.get("addresses")
+  }
+
+  private validationMessages = {
+    required: "Please enter your email address",
+    email: "Please enter a valid email address"
+  }
 
   constructor(private formBuilder: FormBuilder) { }
 
@@ -49,8 +59,35 @@ export class CustomerComponent implements OnInit {
       phone: "",
       notification: "email",
       rating: [null, ratingRange(1, 5)],
-      sendCatalog: true
+      sendCatalog: true,
+      addresses: this.formBuilder.array([this.buildAddress()])
     })
+
+    this.customerForm.get("notification")?.valueChanges.subscribe(
+      value => this.setNotification(value)
+    );
+
+    let emailControl = this.customerForm.get("emailGroup.email")!;
+    emailControl?.valueChanges.pipe(
+      debounceTime(1000)
+    ).subscribe(
+      value => this.setMessage(emailControl)
+    )
+  }
+
+  buildAddress(): FormGroup {
+    return this.formBuilder.group({
+      addressType: "home",
+      street1: "",
+      street2: "",
+      city: "",
+      state: "",
+      zip: ""
+    })
+  }
+
+  addAddress(): void {
+    this.addresses.push(this.buildAddress());
   }
 
   save(): void {
@@ -68,7 +105,6 @@ export class CustomerComponent implements OnInit {
   }
 
   setNotification(notifyVia: string): void {
-    console.log(notifyVia);
     const phoneControl = this.customerForm.get("phone");
     if (notifyVia === "text") {
       phoneControl?.setValidators([Validators.required])
@@ -78,4 +114,13 @@ export class CustomerComponent implements OnInit {
     }
     phoneControl?.updateValueAndValidity()
   }
+
+  setMessage(c: AbstractControl): void {
+    this.emailMessage = "";
+    if ((c.touched || c.dirty) && c.errors) {
+      let errorMsg = Object.keys(c.errors)[0] as keyof typeof this.validationMessages
+      this.emailMessage = this.validationMessages[errorMsg];
+    }
+  }
 }
+
